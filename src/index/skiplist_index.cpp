@@ -46,6 +46,12 @@ bool SKIPLIST_INDEX_TYPE::InsertEntry(
     UNUSED_ATTRIBUTE ItemPointer *value) {
   bool ret = false;
   // TODO: Add your implementation here
+  std::vector<SkipListNode<KeyType> *> result;
+  if (container.Find(key, result)) {
+    return false;
+  }
+  // insert the leaf node
+  // insert all the other nodes
   return ret;
 }
 
