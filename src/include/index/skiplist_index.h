@@ -39,6 +39,8 @@ template <typename KeyType, typename ValueType, typename KeyComparator,
           typename KeyEqualityChecker, typename ValueEqualityChecker>
 class SkipListIndex : public Index {
   friend class IndexFactory;
+  friend class SkipListNode;
+  friend class SkipListDummyNode;
 
   // typedef SkipList<KeyType, ValueType, KeyComparator, KeyEqualityChecker,
   // ValueEqualityChecker> MapType;
@@ -86,6 +88,10 @@ class SkipListIndex : public Index {
 
   // TODO: Implement this
   void PerformGC() { return; }
+
+  void InsertFirstNodeAtLevel(KeyType key, SkipListNode<KeyType> *new_node, SkipListDummyNode<KeyType> *dummy);
+
+  void InsertNodeAtLevel(SkipListNode<KeyType> *prev, KeyType key, SkipListNode<KeyType> *new_node, SkipListDummyNode<KeyType> *dummy);
 
  protected:
   // equality checker and comparator
