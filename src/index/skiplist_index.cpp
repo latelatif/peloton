@@ -27,8 +27,8 @@ SKIPLIST_INDEX_TYPE::SkipListIndex(IndexMetadata *metadata)
       // Key "less than" relation comparator
       comparator{},
       // Key equality checker
-      equals{} {
-  // TODO: Add your implementation here
+      equals{},
+      container(comparator, equals) {
   return;
 }
 
@@ -42,108 +42,13 @@ SKIPLIST_INDEX_TYPE::~SkipListIndex() {}
  */
 SKIPLIST_TEMPLATE_ARGUMENTS
 bool SKIPLIST_INDEX_TYPE::InsertEntry(
-    const storage::Tuple *key,
+    const storage::Tuple *index_key,
     ItemPointer *value) {
 
-  std::vector<std::pair<SkipListNode<KeyType> *, SkipListDummyNode<KeyType> *>> result;
-  if (container.FindPrevious(key, nullptr, result)) {
-    return false;
-  }
-
-  // Not a duplicate, start insert
-  int index = result.size() - 1;
-  srand(time(0));
-  SkipListNode<KeyType> *down = nullptr;
-  bool finish = false;
-
-  for (int i = index; i >= 0; i--) {
-
-    // Go through the result bottom up
-    SkipListNode<KeyType> *new_node;
-
-    if (i == index) {
-      // Leaf node
-      new_node = reinterpret_cast<SkipListNode <KeyType> *>(new SkipListLeafNode<KeyType, ValueType>(key, val, nullptr));
-      down = new_node;
-    } else {
-      // Internal node. randomization and break if fail
-      int random_val = rand() % 2;
-      if (random_val == 0) {
-        finish = true;
-        break;
-      }
-      new_node = reinterpret_cast<SkipListNode <KeyType> *>(new SkipListInternalNode<KeyType>(key, down, nullptr));
-      down = new_node;
-    }
-
-
-    if (result[i].first == nullptr) {
-      // New node has to be inserted right after the dummy
-      InsertFirstNodeAtLevel(key, new_node, result[i].second);
-    } else {
-      // New node has to be inserted after result[i].first
-      InsertNodeAtLevel(result[i].first, key, new_node, result[i].second);
-    }
-  }
-
-
-  SkipListDummyNode<KeyType> *root = result[0].second;
-
-
-  if (!finish) {
-    while (rand() % 2) {
-      // Randomization leading to addition of new levels
-      new_node = reinterpret_cast<SkipListNode <KeyType> *>(new SkipListInternalNode<KeyType>(key, down, nullptr));
-      root = container.CreateNewLevel(root);
-      if (root->GetNext() == nullptr) {
-        InsertFirstNodeAtLevel(key, new_node, root);
-      } else {
-        std::vector<std::pair<SkipListNode<KeyType> *, SkipListDummyNode<KeyType> *>> result;
-        container.FindPrevious(key, root, result);
-        InsertNodeAtLevel(result[0].first, key, new_node, root);
-      }
-    }
-  }
-
-  return true;
+  KeyType key;
+  key.SetFromKey(index_key);
+  return container.Insert(key, value);
 }
-
-
-SKIPLIST_TEMPLATE_ARGUMENTS
-void SKIPLIST_INDEX_TYPE::InsertFirstNodeAtLevel(KeyType key, SkipListNode<KeyType> *new_node, SkipListDummyNode<KeyType> *dummy) {
-  assert(new_node && dummy);
-  SkipListNode<KeyType> *head = dummy->GetNext();
-  new_node->SetNext(head);
-
-  while (!dummy->next_.compare_exchange_weak(head, new_node)) {
-    std::vector<std::pair<SkipListNode<KeyType> *, SkipListDummyNode<KeyType> *>> result;
-    container.FindNewPrevious(key, dummy, result);
-    if (result[0].first != nullptr) {
-      InsertNodeAtLevel(result[0].first, key, new_node, dummy);
-      return;
-    }
-    head = dummy->GetNext();
-    new_node->SetNext(head);
-  }
-}
-
-SKIPLIST_TEMPLATE_ARGUMENTS
-void SKIPLIST_INDEX_TYPE::InsertNodeAtLevel(SkipListNode<KeyType> *prev, KeyType key, SkipListNode<KeyType> *new_node, SkipListDummyNode<KeyType> *dummy) {
-  assert(prev && new_node && dummy);
-  SkipListNode<KeyType> *next = prev->GetNext();
-
-  while (!prev->next_.compare_exchange_weak(next, new_node)) {
-    std::vector<std::pair<SkipListNode<KeyType> *, SkipListDummyNode<KeyType> *>> result;
-    container.FindNewPrevious(key, dummy, result);
-    if (result[0].first == nullptr) {
-      InsertFirstNodeAtLevel(key, new_node, dummy);
-      return;
-    }
-    next = prev->GetNext();
-    new_node->SetNext(next);
-  }
-}
-
 
 /*
  * DeleteEntry() - Removes a key-value pair
