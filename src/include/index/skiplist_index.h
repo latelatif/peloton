@@ -39,8 +39,6 @@ template <typename KeyType, typename ValueType, typename KeyComparator,
           typename KeyEqualityChecker, typename ValueEqualityChecker>
 class SkipListIndex : public Index {
   friend class IndexFactory;
-  friend class SkipListNode<KeyType>;
-  friend class SkipListDummyNode<KeyType>;
 
   // typedef SkipList<KeyType, ValueType, KeyComparator, KeyEqualityChecker,
   // ValueEqualityChecker> MapType;

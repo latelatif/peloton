@@ -45,9 +45,12 @@ bool SKIPLIST_INDEX_TYPE::InsertEntry(
     const storage::Tuple *index_key,
     ItemPointer *value) {
 
+  (void) value;
+
   KeyType key;
   key.SetFromKey(index_key);
-  return container.Insert(key, value);
+  return false;
+//  return container.Insert(key, value);
 }
 
 /*
