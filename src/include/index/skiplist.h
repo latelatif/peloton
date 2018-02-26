@@ -397,6 +397,20 @@ public:
 //    }
 //    return del_node;
 //  }
+//  
+  bool Insert(const KeyType &key, const ValueType &value) {
+    (void)key;
+    (void)value;
+    bool ret = false;
+    return ret;
+  }
+
+  bool Delete(const KeyType &key, const ValueType &value) {
+    (void)key;
+    (void)value;
+    bool ret = false;
+    return ret;
+  }
 
   void HelpMarked(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
     PL_ASSERT(IS_WORD_ALIGNED(prev_node));
