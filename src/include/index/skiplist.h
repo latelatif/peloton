@@ -24,6 +24,7 @@ namespace index {
   template <typename KeyType, typename ValueType, typename KeyComparator, \
             typename KeyEqualityChecker, typename ValueEqualityChecker>
 
+
 #define SKIPLISTNODE_TYPE SkipListNode<KeyType>
 #define SKIPLISTLEAFNODE_TYPE SkipListLeafNode<KeyType, ValueType>
 #define SKIPLISTHEADNODE_TYPE SkipListHeadNode<KeyType>
@@ -32,6 +33,8 @@ namespace index {
 #define MAX_LEVEL 1000
 
 template <typename KeyType>
+
+
 class SkipListNode {
 public:
 
@@ -45,15 +48,25 @@ public:
   };
 
   SkipListNode(KeyType key, TowerType tower_type,
-               SkipListNode<KeyType> *succ, SkipListNode<KeyType> *down)
-               : key_(key), tower_type_(tower_type), succ_(succ),  down_(down){}
+               SKIPLISTNODE_TYPE *succ,
+               SKIPLISTNODE_TYPE *down, SKIPLISTNODE_TYPE *tower_root)
+               : key_(key), tower_type_(tower_type),
+                 succ_(succ),  down_(down), tower_root_(tower_root){}
 
   inline KeyType GetKey() {
     return key_;
   }
 
+  inline SKIPLISTNODE_TYPE *GetSucc(){
+    return succ_;
+  }
+
+  inline SKIPLISTNODE_TYPE **GetSuccPtr(){
+    return &succ_;
+  }
+
   inline SKIPLISTNODE_TYPE *GetRight() {
-    return succ_ & (~(0x3));
+    return (SKIPLISTNODE_TYPE* )((long)succ_ & (~(0x3L)));
   }
 
 
@@ -73,9 +86,6 @@ public:
     return (((long)node & 2L)==2);
   }
 
-
-
-
   inline TowerType GetTowerType(){
     return tower_type_;
   }
@@ -92,21 +102,29 @@ public:
     tower_root_ = tower_root;
   }
 
-  inline SKIPLISTNODE_TYPE *GetSucc(){
-    return succ_;
-  }
+
 
   inline void SetSucc(SKIPLISTNODE_TYPE *succ) {
     succ_ = succ;
   }
 
-  inline SKIPLISTNODE_TYPE GetBackLink(){
+  inline SKIPLISTNODE_TYPE *GetBackLink(){
     return back_link_;
   }
 
-  inline void SetBackLink(SKIPLISTNODE_TYPE back_link){
-    return back_link_ = back_link;
+  inline void SetBackLink(SKIPLISTNODE_TYPE *back_link){
+    back_link_ = back_link;
   }
+
+  inline SKIPLISTNODE_TYPE *GetDown(){
+    return down_;
+  }
+
+  inline void SetDown(SKIPLISTNODE_TYPE *down){
+    down_ = down;
+  }
+
+
 
 private:
   KeyType key_;
@@ -115,14 +133,17 @@ private:
   SKIPLISTNODE_TYPE *down_;
   SKIPLISTNODE_TYPE *tower_root_;
   SKIPLISTNODE_TYPE *back_link_;
+
+
 };
 
 template <typename KeyType, typename ValueType>
-class SkipListLeafNode : SkipListNode<KeyType> {
+class SkipListLeafNode : public  SkipListNode<KeyType> {
 public:
-  SkipListLeafNode(KeyType key, SkipListNode<KeyType> *right,
-                   SkipListNode<KeyType> *down, ValueType value)
-                    : SkipListNode<KeyType>(key, SKIPLISTNODE_TYPE::TowerType::MIDDLE_TOWER, right, down), value_(value) {}
+  SkipListLeafNode(KeyType key, typename SKIPLISTNODE_TYPE::TowerType tower_type,
+                   SKIPLISTNODE_TYPE *succ, ValueType value)
+                    : SKIPLISTNODE_TYPE(key, tower_type, succ, nullptr, nullptr),
+                      value_(value) {}
 
   inline ValueType GetValue() {
     return value_;
@@ -133,15 +154,25 @@ private:
 };
 
 template <typename KeyType>
-class SkipListHeadNode : SkipListNode<KeyType> {
+class SkipListHeadNode : public SkipListNode<KeyType> {
 public:
   SkipListHeadNode(KeyType key, SkipListNode<KeyType> *right,
                    SkipListNode<KeyType> *down, SkipListHeadNode<KeyType> *up) : SkipListNode<KeyType>(key, right, down),
     up_(up) {}
 
+
+  inline SKIPLISTHEADNODE_TYPE *GetUp(){
+    return up_;
+  }
+
+  inline void SetUp(SKIPLISTHEADNODE_TYPE *up){
+    up_ = up;
+  }
+
 private:
   SkipListHeadNode<KeyType> *up_;
 };
+
 
 template <typename KeyType, typename ValueType, typename KeyComparator,
           typename KeyEqualityChecker, typename ValueEqualityChecker>
@@ -167,11 +198,11 @@ public:
   NodeLevelPair FindStart(int level) {
     SKIPLISTHEADNODE_TYPE *curr_node = reinterpret_cast<SKIPLISTHEADNODE_TYPE *>(head_);
     int curr_level = 1;
-    while ((curr_node->up->GetSucc() != nullptr) || (curr_level < level)) {
-      curr_node = curr_node->up;
+    while ((curr_node->GetUp()->GetSucc() != nullptr) || (curr_level < level)) {
+      curr_node = curr_node->GetUp();
       curr_level++;
     }
-    return make_pair(curr_node, curr_level);
+    return std::make_pair(reinterpret_cast<SKIPLISTNODE_TYPE *>(curr_node), curr_level);
   }
 
   SKIPLISTLEAFNODE_TYPE *Search(const KeyType &key) {
@@ -191,16 +222,18 @@ public:
   NodeNodePair SearchToLevel(const KeyType &key, int level) {
     NodeLevelPair node_level = FindStart(level);
     SKIPLISTNODE_TYPE *curr_node = node_level.first;
-    NodeNodePair node_node = nullptr;
+    NodeNodePair node_node;
+
     int curr_level = node_level.second;
     while (curr_level > level) { // search down to level v + 1
       node_node = SearchRight(key, curr_node);
       curr_node = node_node.first;
-      curr_node = curr_node->down;
+      curr_node = curr_node->GetDown();
       curr_level--;
     }
     node_node = SearchRight(key, curr_node);
     return node_node;
+
   }
 
   NodeNodePair SearchRight(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
@@ -272,7 +305,7 @@ public:
 
 
 
-  SKIPLISTNODE_TYPE *Insert(const KeyType &key, const ValueType &value) {
+  bool Insert(const KeyType &key, const ValueType &value) {
 
     int tower_height = 1, curr_level = 1;
 
@@ -286,16 +319,17 @@ public:
 
     if(prev_node->GetTowerType() != SKIPLISTNODE_TYPE::TowerType::HEAD_TOWER) {
       if (key_eq_check_obj_(prev_node->GetKey(), key)) {
-        return nullptr;   // DUPLICATE
+        return false;   // DUPLICATE
       }
     }
 
     SKIPLISTNODE_TYPE *new_root_node = reinterpret_cast<SKIPLISTNODE_TYPE *>(
                                             new SKIPLISTLEAFNODE_TYPE(
-                                              key, nullptr, nullptr, nullptr, value));
+                                              key, SKIPLISTNODE_TYPE::TowerType::MIDDLE_TOWER,
+                                              nullptr, value));
 
     new_root_node->SetTowerRoot(new_root_node);
-    SKIPLISTNODE_TYPE *new_node = new_root_node;
+    SKIPLISTNODE_TYPE *new_node = new_root_node, *tower_root = new_node;
 
     // TODO: remove max_level restriction
     while (rand() % 2 && (tower_height <= MAX_LEVEL - 1)) {
@@ -311,23 +345,27 @@ public:
 
       if (inserted_node == nullptr && curr_level == 1) {
         delete new_node;
-        return nullptr;
+        return false;
       }
 
       if(SKIPLISTNODE_TYPE::IsMarkedReference(new_root_node->GetSucc())){
         if (inserted_node == new_node && new_node != new_root_node) {
-          DeleteNode(prev_node, new_node);
+          //TODO(gandeevan): uncomment this later
+          //DeleteNode(prev_node, new_node);
         }
-        return new_root_node;
+        return true;
       }
       curr_level++;
 
       if (curr_level == tower_height + 1) {
-        return new_root_node;
+        return true;
       }
 
-      SKIPLISTNODE_TYPE *last_node = new_node;
-      new_node = new SKIPLISTNODE_TYPE(key, nullptr, last_node, new_root_node);
+      SKIPLISTNODE_TYPE *down = new_node;
+      new_node = new SKIPLISTNODE_TYPE(key,
+                                       SKIPLISTNODE_TYPE::TowerType::MIDDLE_TOWER,
+                                       nullptr, down, tower_root);
+
       result_pair = SearchToLevel(key, curr_level);
       prev_node = result_pair.first;
       next_node = result_pair.second;
@@ -336,6 +374,10 @@ public:
 
   NodeNodePair InsertNode(SKIPLISTNODE_TYPE *new_node, SKIPLISTNODE_TYPE *prev_node,
                           SKIPLISTNODE_TYPE *next_node) {
+
+    PL_ASSERT(IS_WORD_ALIGNED(new_node));
+    PL_ASSERT(IS_WORD_ALIGNED(prev_node));
+    PL_ASSERT(IS_WORD_ALIGNED(next_node));
 
     if(prev_node->GetTowerType()!=SKIPLISTNODE_TYPE::TowerType::HEAD_TOWER) {
       if (key_eq_check_obj_(prev_node->GetKey(), new_node->GetKey())) {
@@ -348,9 +390,9 @@ public:
         HelpFlagged(prev_node, prev_node->GetRight());
       }
       else {
-        new_node->SetRight(next_node);
-        if (__sync_bool_compare_and_swap(&prev_node->succ_, next_node, new_node)) {
-          return make_pair(prev_node, new_node);
+        new_node->SetSucc(next_node);
+        if (__sync_bool_compare_and_swap(prev_node->GetSuccPtr(), next_node, new_node)) {
+          return std::make_pair(prev_node, new_node);
         } else {
           if (SKIPLISTNODE_TYPE::IsFlagged(prev_node->GetSucc())) {
             HelpFlagged(prev_node, prev_node->GetRight());
@@ -365,9 +407,9 @@ public:
       prev_node = result.first;
       next_node = result.second;
 
-      if(prev_node->GetTowerType()!=SKIPLISTNODE_TYPE::TOWER_TYPE::HEAD_TOWER) {
+      if(prev_node->GetTowerType()!=SKIPLISTNODE_TYPE::TowerType::HEAD_TOWER) {
         if (key_eq_check_obj_(prev_node->GetKey(), new_node->GetKey())) {
-          return make_pair(prev_node, nullptr);
+          return std::make_pair(prev_node, nullptr);
         }
       }
 
@@ -398,19 +440,7 @@ public:
 //    return del_node;
 //  }
 //  
-  bool Insert(const KeyType &key, const ValueType &value) {
-    (void)key;
-    (void)value;
-    bool ret = false;
-    return ret;
-  }
 
-  bool Delete(const KeyType &key, const ValueType &value) {
-    (void)key;
-    (void)value;
-    bool ret = false;
-    return ret;
-  }
 
   void HelpMarked(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
     PL_ASSERT(IS_WORD_ALIGNED(prev_node));
@@ -419,7 +449,7 @@ public:
     SKIPLISTNODE_TYPE *old_val = SKIPLISTNODE_TYPE::DoMark(del_node);
     SKIPLISTNODE_TYPE *new_val = del_node->GetRight();
 
-    __sync_bool_compare_and_swap(&prev_node->succ_, old_val, new_val);
+    __sync_bool_compare_and_swap(prev_node->GetSuccPtr(), old_val, new_val);
   }
 
   void HelpFlagged(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
@@ -446,11 +476,11 @@ public:
         return  std::make_tuple(prev_node, StatusType::FLAGGED, false);
       }
 
-      SKIPLISTNODE_TYPE target_node_flagged =  SKIPLISTNODE_TYPE::DoFlag(target_node);
+      SKIPLISTNODE_TYPE* target_node_flagged =  SKIPLISTNODE_TYPE::DoFlag(target_node);
 
       /* atomically flag the prev_node */
-      SKIPLISTNODE_TYPE *result = __sync_val_compare_and_swap(&prev_node->succ_
-              , target_node, target_node_flagged);
+      SKIPLISTNODE_TYPE *result = __sync_val_compare_and_swap(prev_node->GetSuccPtr(),
+                                                              target_node, target_node_flagged);
 
       /* c&s was successful */
       if(result==target_node){
@@ -485,7 +515,7 @@ public:
       SKIPLISTNODE_TYPE *next = del_node->GetRight();
       SKIPLISTNODE_TYPE *next_marked = SKIPLISTNODE_TYPE::DoMark(next);
 
-      SKIPLISTNODE_TYPE *result = __sync_val_compare_and_swap(&del_node->succ_, next, next_marked);
+      SKIPLISTNODE_TYPE *result = __sync_val_compare_and_swap(del_node->GetSuccPtr(), next, next_marked);
 
       /* the next node is being deleted as well */
       if(SKIPLISTNODE_TYPE::IsFlagged(result))

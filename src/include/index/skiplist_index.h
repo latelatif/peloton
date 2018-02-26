@@ -89,6 +89,7 @@ class SkipListIndex : public Index {
 
 
  protected:
+
   // equality checker and comparator
   KeyComparator comparator;
   KeyEqualityChecker equals;
