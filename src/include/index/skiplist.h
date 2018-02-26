@@ -163,6 +163,20 @@ public:
 //  void TryMark(UNUSED_ATTRIBUTE SKIPLISTNODE_TYPE *del_node) {
 //    // To be implemented
 //  }
+//  
+  bool Insert(const KeyType &key, const ValueType &value) {
+    (void)key;
+    (void)value;
+    bool ret = false;
+    return ret;
+  }
+
+  bool Delete(const KeyType &key, const ValueType &value) {
+    (void)key;
+    (void)value;
+    bool ret = false;
+    return ret;
+  }
 
   inline SKIPLISTNODE_TYPE *GetHead() {
     return head_;
