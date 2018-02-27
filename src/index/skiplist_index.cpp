@@ -49,6 +49,7 @@ bool SKIPLIST_INDEX_TYPE::InsertEntry(
   KeyType index_key;
   index_key.SetFromKey(key);
 
+
   bool ret = container.Insert(index_key, value);
 //
 //  if (static_cast<StatsType>(settings::SettingsManager::GetInt(
@@ -144,7 +145,9 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
 SKIPLIST_TEMPLATE_ARGUMENTS
 void SKIPLIST_INDEX_TYPE::ScanAllKeys(
     UNUSED_ATTRIBUTE std::vector<ValueType> &result) {
-  // TODO: Add your implementation here
+
+  PrintIndex();
+
   return;
 }
 
