@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+
+// TODO(gandeevan): might want to change the scan functions to an iterator model
+
 #pragma once
 
 #include <iostream>
@@ -49,6 +52,11 @@ public:
       HEAD_TOWER = 0,
       MIDDLE_TOWER = 1,
       //TAIL_TOWER =2,
+  };
+
+  enum class TraversalMode {
+      GO_DOWN_ON_LT = 0,
+      GO_DOWN_ON_LEQ = 1,
   };
 
   SkipListNode(KeyType key, TowerType tower_type,
@@ -244,7 +252,7 @@ public:
     SKIPLISTNODE_TYPE *node = head->GetRight();
 
     while(node){
-      std::cout<<"node: "<<node<<" --> ";
+      printf("(key=%s) --> ", node->GetKey().GetInfo().c_str());
       node = node->GetRight();
     }
 
@@ -279,7 +287,7 @@ public:
 
 
   SKIPLISTLEAFNODE_TYPE *Search(const KeyType &key) {
-    NodeNodePair node_node = SearchToLevel(key, 1);
+    NodeNodePair node_node = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
     SKIPLISTLEAFNODE_TYPE *curr_node = reinterpret_cast<SKIPLISTLEAFNODE_TYPE *>(node_node.first);
 
     if(curr_node->GetTowerType()==SKIPLISTNODE_TYPE::TowerType::HEAD_TOWER)
@@ -292,9 +300,10 @@ public:
     }
   }
 
-  NodeNodePair SearchToLevel(const KeyType &key, int level) {
-    SKIPLISTNODE_TYPE *curr_node = reinterpret_cast<SKIPLISTNODE_TYPE *>(root_);
+  NodeNodePair SearchToLevel(const KeyType &key, int level,
+    typename SKIPLISTNODE_TYPE::TraversalMode traversal_mode) {
 
+    SKIPLISTNODE_TYPE *curr_node = reinterpret_cast<SKIPLISTNODE_TYPE *>(root_);
     // NOTE: Do not use root_->GetLevel(). There might be a new root being created concurrently
     int curr_level = reinterpret_cast<SKIPLISTHEADNODE_TYPE *>(curr_node)->GetLevel();
 
@@ -303,15 +312,56 @@ public:
 
     // int curr_level = node_level.second;
     while (curr_level > level) { // search down to level v + 1
-      node_node = SearchRight(key, curr_node);
-      curr_node = node_node.first->GetDown();
+      if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ)
+        node_node = SearchRightLEQ(key, curr_node);
+      else if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT)
+        node_node = SearchRightLT(key, curr_node);
+
+      curr_node = node_node.first;
+      curr_node = curr_node->GetDown();
       curr_level--;
     }
-    node_node = SearchRight(key, curr_node);
+
+    if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ)
+      node_node = SearchRightLEQ(key, curr_node);
+    else if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT)
+      node_node = SearchRightLT(key, curr_node);
+
+
     return node_node;
   }
 
-  NodeNodePair SearchRight(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
+  void ScanAllKeys(std::vector<ValueType> &result){
+
+    SKIPLISTNODE_TYPE *curr_node = head_;
+    SKIPLISTNODE_TYPE *next_node = head_->GetRight();
+
+    while(next_node){
+
+      /* next node has been marked for deletion */
+      while(next_node!=nullptr  && SKIPLISTNODE_TYPE::IsMarkedReference(next_node->GetTowerRoot()->GetSucc())){
+        NodeStatusResultTuple tuple = TryFlagNode(curr_node, next_node);
+
+        StatusType status = std::get<1>(tuple);
+
+        if(status==StatusType::FLAGGED){
+          HelpFlagged(curr_node, next_node);
+        }
+        next_node = curr_node->GetRight();
+      }
+
+      if(next_node){
+        SKIPLISTLEAFNODE_TYPE *leaf_node = reinterpret_cast<SKIPLISTLEAFNODE_TYPE *>(next_node);
+        result.push_back(leaf_node->GetValue());
+
+        curr_node = next_node;
+        next_node = curr_node->GetRight();
+      }
+    }
+  }
+
+
+  NodeNodePair SearchRightLEQ(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
 
     PL_ASSERT(curr_node);
     PL_ASSERT(IS_WORD_ALIGNED(curr_node));
@@ -345,7 +395,7 @@ public:
     return std::make_pair(curr_node, next_node);
   }
 
-  NodeNodePair SearchRight2(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
+  NodeNodePair SearchRightLT(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
 
     PL_ASSERT(curr_node);
     PL_ASSERT(IS_WORD_ALIGNED(curr_node));
@@ -371,7 +421,7 @@ public:
         next_node = curr_node->GetRight();
       }
 
-      if(next_node && key_eq_check_obj_(next_node->GetKey(), key)<0){
+      if(next_node && key_cmp_obj_(next_node->GetKey(), key)<0){
         curr_node = next_node;
         next_node = curr_node->GetRight();
       }
@@ -386,7 +436,7 @@ public:
     int tower_height = 1, curr_level = 1;
 
 
-    NodeNodePair node_node = SearchToLevel(key, 1);
+    NodeNodePair node_node = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
 
 
     SKIPLISTNODE_TYPE *inserted_node;
@@ -461,7 +511,8 @@ public:
 
       // NOTE: Search being done for level 1, 2, ....n. This might hurt performance if not a lot of concurrency.
       // Should we also store the prev and curr at every level while doing searchtolevel?
-      result_pair = SearchToLevel(key, curr_level);
+      result_pair = SearchToLevel(key, curr_level, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
+
       prev_node = result_pair.first;
       next_node = result_pair.second;
     }
@@ -500,7 +551,7 @@ public:
         }
       }
 
-      NodeNodePair result = SearchRight(new_node->GetKey(), prev_node);
+      NodeNodePair result = SearchRightLEQ(new_node->GetKey(), prev_node);
       prev_node = result.first;
       next_node = result.second;
 
@@ -513,30 +564,39 @@ public:
     }
   }
 
-//  SKIPLISTLEAFNODE_TYPE *Delete(const KeyType &key) {
-//    NodeNodePair result = SearchToLevel2(key, 1);
-//    if (!key_eq_check_obj_(result.second->GetKey(), key)) {
-//      return nullptr;
-//    }
-//    SKIPLISTNODE_TYPE *root_node = DeleteNode(result.first, result.second);
-//    if (root_node == nullptr) {
-//      return nullptr;
-//    }
-//    SearchToLevel(key, 2);
-//    return result.second;
-//  }
-//
-//  SKIPLISTNODE_TYPE *DeleteNode(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
-//    NodeStatusResultTuple result_tuple = TryFlagNode(prev_node, del_node);
-//    if (std::get<1>(result_tuple)) {
-//      HelpFlagged(prev_node, del_node);
-//    }
-//    if (std::get<2>(result_tuple) == nullptr) {
-//      return nullptr;
-//    }
-//    return del_node;
-//  }
-//  
+  bool Delete(const KeyType &key, const ValueType &value) {
+
+    (void) value;
+
+    NodeNodePair result = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT);
+    if (!key_eq_check_obj_(result.second->GetKey(), key)) {
+      return false;
+    }
+
+
+
+    /* Unlinks the root node of the tower */
+    SKIPLISTNODE_TYPE *root_node = DeleteNode(result.first, result.second);
+    if (root_node == nullptr) {
+      return false;
+    }
+
+    /* Unlinks the node at higher levels */
+    SearchToLevel(key, 2, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
+    return true;
+  }
+
+  SKIPLISTNODE_TYPE *DeleteNode(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
+    NodeStatusResultTuple result_tuple = TryFlagNode(prev_node, del_node);
+    if (std::get<1>(result_tuple)==StatusType::FLAGGED) {
+      HelpFlagged(prev_node, del_node);
+    }
+    if (std::get<2>(result_tuple) == false) {
+      return nullptr;
+    }
+    return del_node;
+  }
+
 
 
   void HelpMarked(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
@@ -596,7 +656,7 @@ public:
       }
 
 
-      NodeNodePair node_node = SearchRight2(target_node->GetKey(), prev_node);
+      NodeNodePair node_node = SearchRightLT(target_node->GetKey(), prev_node);
 
       if(node_node.second != target_node)
         return std::make_tuple(prev_node, StatusType::DELETED, false);

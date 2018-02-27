@@ -57,11 +57,11 @@ bool SKIPLIST_INDEX_TYPE::InsertEntry(
 //    stats::BackendStatsContext::GetInstance()->IncrementIndexInserts(metadata);
 //  }
 //
-//  LOG_TRACE("InsertEntry(key=%s, val=%s) [%s]",
-//            index_key.GetInfo().c_str(),
-//            IndexUtil::GetInfo(value).c_str(),
-//            (ret ? "SUCCESS" : "FAIL"));
-//
+  LOG_DEBUG("InsertEntry(key=%s, val=%s) [%s]",
+            index_key.GetInfo().c_str(),
+            IndexUtil::GetInfo(value).c_str(),
+            (ret ? "SUCCESS" : "FAIL"));
+
     return ret;
 }
 
@@ -72,31 +72,43 @@ bool SKIPLIST_INDEX_TYPE::InsertEntry(
  */
 SKIPLIST_TEMPLATE_ARGUMENTS
 bool SKIPLIST_INDEX_TYPE::DeleteEntry(
-   UNUSED_ATTRIBUTE const storage::Tuple *key,
-   UNUSED_ATTRIBUTE ItemPointer *value) {
+   const storage::Tuple *key,
+   ItemPointer *value) {
 
 
-//  KeyType index_key;
-//  index_key.SetFromKey(key);
+  KeyType index_key;
+  index_key.SetFromKey(key);
 
-//  size_t delete_count = 0;
-//
-//  // In Delete() since we just use the value for comparison (i.e. read-only)
-//  // it is unnecessary for us to allocate memory
-//  bool ret = container.Delete(index_key, value);
-//
+  size_t delete_count = 0;
+
+  // In Delete() since we just use the value for comparison (i.e. read-only)
+  // it is unnecessary for us to allocate memory
+  bool ret = container.Delete(index_key, value);
+
+  (void) ret;
+  (void) delete_count;
+
 //  if (static_cast<StatsType>(settings::SettingsManager::GetInt(
 //          settings::SettingId::stats_mode)) != StatsType::INVALID) {
 //    stats::BackendStatsContext::GetInstance()->IncrementIndexDeletes(
 //        delete_count, metadata);
 //  }
-//
-//  LOG_TRACE("DeleteEntry(key=%s, val=%s) [%s]",
-//            index_key.GetInfo().c_str(),
-//            IndexUtil::GetInfo(value).c_str(),
-//            (ret ? "SUCCESS" : "FAIL"));
-//
+
+  LOG_DEBUG("DeleteEntry(key=%s, val=%s) [%s]",
+            index_key.GetInfo().c_str(),
+            IndexUtil::GetInfo(value).c_str(),
+            (ret ? "SUCCESS" : "FAIL"));
+
     return false;
+}
+
+
+SKIPLIST_TEMPLATE_ARGUMENTS
+void SKIPLIST_INDEX_TYPE::ScanAllKeys(
+        std::vector<ValueType> &result) {
+
+  container.ScanAllKeys(result);
+  return;
 }
 
 SKIPLIST_TEMPLATE_ARGUMENTS
@@ -142,14 +154,7 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
   return;
 }
 
-SKIPLIST_TEMPLATE_ARGUMENTS
-void SKIPLIST_INDEX_TYPE::ScanAllKeys(
-    UNUSED_ATTRIBUTE std::vector<ValueType> &result) {
 
-  PrintIndex();
-
-  return;
-}
 
 SKIPLIST_TEMPLATE_ARGUMENTS
 void SKIPLIST_INDEX_TYPE::ScanKey(
