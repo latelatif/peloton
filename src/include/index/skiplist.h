@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+
+// TODO(gandeevan): might want to change the scan functions to an iterator model
+
 #pragma once
 
 #include <iostream>
@@ -328,6 +331,36 @@ public:
     return node_node;
 
   }
+
+  void ScanAllKeys(std::vector<ValueType> &result){
+
+    SKIPLISTNODE_TYPE *curr_node = head_;
+    SKIPLISTNODE_TYPE *next_node = head_->GetRight();
+
+    while(next_node){
+
+      /* next node has been marked for deletion */
+      while(next_node!=nullptr  && SKIPLISTNODE_TYPE::IsMarkedReference(next_node->GetTowerRoot()->GetSucc())){
+        NodeStatusResultTuple tuple = TryFlagNode(curr_node, next_node);
+
+        StatusType status = std::get<1>(tuple);
+
+        if(status==StatusType::FLAGGED){
+          HelpFlagged(curr_node, next_node);
+        }
+        next_node = curr_node->GetRight();
+      }
+
+      if(next_node){
+        SKIPLISTLEAFNODE_TYPE *leaf_node = reinterpret_cast<SKIPLISTLEAFNODE_TYPE *>(next_node);
+        result.push_back(leaf_node->GetValue());
+
+        curr_node = next_node;
+        next_node = curr_node->GetRight();
+      }
+    }
+  }
+
 
   NodeNodePair SearchRightLEQ(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
 

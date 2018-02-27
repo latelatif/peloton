@@ -102,6 +102,15 @@ bool SKIPLIST_INDEX_TYPE::DeleteEntry(
     return false;
 }
 
+
+SKIPLIST_TEMPLATE_ARGUMENTS
+void SKIPLIST_INDEX_TYPE::ScanAllKeys(
+        std::vector<ValueType> &result) {
+
+  container.ScanAllKeys(result);
+  return;
+}
+
 SKIPLIST_TEMPLATE_ARGUMENTS
 bool SKIPLIST_INDEX_TYPE::CondInsertEntry(
     UNUSED_ATTRIBUTE const storage::Tuple *key,
@@ -145,14 +154,7 @@ void SKIPLIST_INDEX_TYPE::ScanLimit(
   return;
 }
 
-SKIPLIST_TEMPLATE_ARGUMENTS
-void SKIPLIST_INDEX_TYPE::ScanAllKeys(
-    UNUSED_ATTRIBUTE std::vector<ValueType> &result) {
 
-  PrintIndex();
-
-  return;
-}
 
 SKIPLIST_TEMPLATE_ARGUMENTS
 void SKIPLIST_INDEX_TYPE::ScanKey(
