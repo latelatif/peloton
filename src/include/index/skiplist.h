@@ -221,8 +221,8 @@ private:
 
 public:
 
-  SkipList(KeyComparator key_cmp_obj, KeyEqualityChecker key_eq_check_obj) :
-          key_cmp_obj_(key_cmp_obj), key_eq_check_obj_(key_eq_check_obj) {
+  SkipList(KeyComparator key_cmp_obj, KeyEqualityChecker key_eq_check_obj, bool is_unique) :
+          key_cmp_obj_(key_cmp_obj), key_eq_check_obj_(key_eq_check_obj), is_unique_(is_unique) {
     // InitHeadTower();
     // No tower root needed or set for head tower
     root_ = new SKIPLISTHEADNODE_TYPE(nullptr, nullptr, nullptr, nullptr, 1);
@@ -308,9 +308,7 @@ public:
     int curr_level = reinterpret_cast<SKIPLISTHEADNODE_TYPE *>(curr_node)->GetLevel();
 
     NodeNodePair node_node;
-    // while (curr_level > level) {
 
-    // int curr_level = node_level.second;
     while (curr_level > level) { // search down to level v + 1
       if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ)
         node_node = SearchRightLEQ(key, curr_node);
@@ -326,8 +324,6 @@ public:
       node_node = SearchRightLEQ(key, curr_node);
     else if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT)
       node_node = SearchRightLT(key, curr_node);
-
-
     return node_node;
   }
 
@@ -430,13 +426,53 @@ public:
   }
 
 
+  bool DuplicateKeyValue(const NodeNodePair &arg_pair, const KeyType &key, const ValueType &value) {
+    assert(arg_pair.first);
+    if (arg_pair.second == nullptr) {
+      return false;
+    }
+    SKIPLISTNODE_TYPE *curr_node = arg_pair.first, *next_node = arg_pair.second;
+    while(next_node && key_cmp_obj_(next_node->GetKey(), key)<=0){
+      /*
+       * next_node has been marked for deletion,
+       * help with the deletion and then
+       * continue traversing.
+       */
+      while(next_node!=nullptr && SKIPLISTNODE_TYPE::IsMarkedReference(next_node->GetTowerRoot()->GetSucc())){
+        NodeStatusResultTuple tuple = TryFlagNode(curr_node, next_node);
+
+        StatusType status = std::get<1>(tuple);
+
+        if(status==StatusType::FLAGGED){
+          HelpFlagged(curr_node, next_node);
+        }
+        next_node = curr_node->GetRight();
+      }
+      if (next_node && key_eq_check_obj_(next_node->GetKey(), key) &&
+          val_eq_check_obj_(reinterpret_cast<SKIPLISTLEAFNODE_TYPE *>(next_node)->GetValue(), value)) {
+        return true;
+      }
+
+      if(next_node && key_cmp_obj_(next_node->GetKey(), key)<=0) {
+        curr_node = next_node;
+        next_node = curr_node->GetRight();
+      }
+    }
+    return false;
+  }
+
 
   bool Insert(const KeyType &key, const ValueType &value) {
 
     int tower_height = 1, curr_level = 1;
 
 
-    NodeNodePair node_node = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
+    NodeNodePair node_node;
+    if (is_unique_) {
+      node_node = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
+    } else {
+      node_node = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT);
+    }
 
 
     SKIPLISTNODE_TYPE *inserted_node;
@@ -444,11 +480,14 @@ public:
 
     PL_ASSERT(prev_node);
 
-
-    if(prev_node->GetTowerType() != SKIPLISTNODE_TYPE::TowerType::HEAD_TOWER) {
+    if (is_unique_ && prev_node->GetTowerType() != SKIPLISTNODE_TYPE::TowerType::HEAD_TOWER) {
       if (key_eq_check_obj_(prev_node->GetKey(), key)) {
         return false;   // DUPLICATE
       }
+    }
+
+    if (is_unique_ == false && DuplicateKeyValue(node_node, key, value)) {
+      return false;
     }
 
     SKIPLISTNODE_TYPE *new_root_node = reinterpret_cast<SKIPLISTNODE_TYPE *>(
@@ -494,7 +533,7 @@ public:
       if(SKIPLISTNODE_TYPE::IsMarkedReference(tower_root->GetSucc())){
         if (inserted_node == new_node && new_node != tower_root) {
           //TODO(gandeevan): uncomment this later
-          //DeleteNode(prev_node, new_node);
+          // DeleteNode(prev_node, new_node);
         }
         return true;
       }
@@ -511,8 +550,11 @@ public:
 
       // NOTE: Search being done for level 1, 2, ....n. This might hurt performance if not a lot of concurrency.
       // Should we also store the prev and curr at every level while doing searchtolevel?
-      result_pair = SearchToLevel(key, curr_level, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
-
+      if (is_unique_) {
+        result_pair = SearchToLevel(key, curr_level, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
+      } else {
+        result_pair = SearchToLevel(key, curr_level, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT);
+      }
       prev_node = result_pair.first;
       next_node = result_pair.second;
     }
@@ -566,14 +608,13 @@ public:
 
   bool Delete(const KeyType &key, const ValueType &value) {
 
-    (void) value;
-
     NodeNodePair result = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT);
     if (!key_eq_check_obj_(result.second->GetKey(), key)) {
       return false;
     }
-
-
+    if (is_unique_ == false && !DuplicateKeyValue(result, key, value)) {
+      return false;
+    }
 
     /* Unlinks the root node of the tower */
     SKIPLISTNODE_TYPE *root_node = DeleteNode(result.first, result.second);
@@ -691,6 +732,8 @@ private:
   SKIPLISTHEADNODE_TYPE *root_;
   const KeyComparator key_cmp_obj_;
   const KeyEqualityChecker key_eq_check_obj_;
+  const ValueEqualityChecker val_eq_check_obj_;
+  bool is_unique_;
 };
 
 }  // namespace index
