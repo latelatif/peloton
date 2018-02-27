@@ -13,6 +13,7 @@
 #pragma once
 
 #include <iostream>
+#include <tuple>
 
 namespace peloton {
 namespace index {
@@ -138,7 +139,7 @@ private:
 };
 
 template <typename KeyType, typename ValueType>
-class SkipListLeafNode : public  SkipListNode<KeyType> {
+class SkipListLeafNode : public SKIPLISTNODE_TYPE {
 public:
   SkipListLeafNode(KeyType key, typename SKIPLISTNODE_TYPE::TowerType tower_type,
                    SKIPLISTNODE_TYPE *succ, ValueType value)
@@ -154,11 +155,13 @@ private:
 };
 
 template <typename KeyType>
-class SkipListHeadNode : public SkipListNode<KeyType> {
+class SkipListHeadNode : public SKIPLISTNODE_TYPE {
 public:
-  SkipListHeadNode(KeyType key, SkipListNode<KeyType> *right,
-                   SkipListNode<KeyType> *down, SkipListHeadNode<KeyType> *up) : SkipListNode<KeyType>(key, right, down),
-    up_(up) {}
+  SkipListHeadNode(KeyType key, SKIPLISTNODE_TYPE *right,
+                   SKIPLISTNODE_TYPE *down,
+                   SKIPLISTHEADNODE_TYPE *up, int level) : SKIPLISTNODE_TYPE(key, SKIPLISTNODE_TYPE::TowerType::HEAD_TOWER,
+                                                                                     right, down, nullptr), up_(up),
+                                                               level_(level) {}
 
 
   inline SKIPLISTHEADNODE_TYPE *GetUp(){
@@ -169,8 +172,13 @@ public:
     up_ = up;
   }
 
+  inline int GetLevel() {
+    return level_;
+  }
+
 private:
-  SkipListHeadNode<KeyType> *up_;
+  SKIPLISTHEADNODE_TYPE *up_;
+  int level_;
 };
 
 
@@ -193,17 +201,14 @@ private:
 public:
 
 
-  SkipList(KeyComparator key_cmp_obj, KeyEqualityChecker key_eq_check_obj) : key_cmp_obj_(key_cmp_obj), key_eq_check_obj_(key_eq_check_obj) {}
-
-  NodeLevelPair FindStart(int level) {
-    SKIPLISTHEADNODE_TYPE *curr_node = reinterpret_cast<SKIPLISTHEADNODE_TYPE *>(head_);
-    int curr_level = 1;
-    while ((curr_node->GetUp()->GetSucc() != nullptr) || (curr_level < level)) {
-      curr_node = curr_node->GetUp();
-      curr_level++;
-    }
-    return std::make_pair(reinterpret_cast<SKIPLISTNODE_TYPE *>(curr_node), curr_level);
+  SkipList(KeyComparator key_cmp_obj, KeyEqualityChecker key_eq_check_obj) : key_cmp_obj_(key_cmp_obj),
+                                                                             key_eq_check_obj_(key_eq_check_obj) {
+    // TODO(Anirudh): How hard is it to delete a head node when no entries at that level
+    KeyType index_key;
+    index_key.SetFromKey(nullptr);
+    root_ = new SKIPLISTHEADNODE_TYPE(index_key, nullptr, nullptr, nullptr, 1);
   }
+
 
   SKIPLISTLEAFNODE_TYPE *Search(const KeyType &key) {
     NodeNodePair node_node = SearchToLevel(key, 1);
@@ -220,20 +225,19 @@ public:
   }
 
   NodeNodePair SearchToLevel(const KeyType &key, int level) {
-    NodeLevelPair node_level = FindStart(level);
-    SKIPLISTNODE_TYPE *curr_node = node_level.first;
-    NodeNodePair node_node;
+    SKIPLISTNODE_TYPE *curr_node = reinterpret_cast<SKIPLISTNODE_TYPE *>(root_);
 
-    int curr_level = node_level.second;
-    while (curr_level > level) { // search down to level v + 1
+    // NOTE: Do not use root_->GetLevel(). There might be a new root being created concurrently
+    int curr_level = reinterpret_cast<SKIPLISTHEADNODE_TYPE *>(curr_node)->GetLevel();
+
+    NodeNodePair node_node;
+    while (curr_level > level) {
       node_node = SearchRight(key, curr_node);
-      curr_node = node_node.first;
-      curr_node = curr_node->GetDown();
+      curr_node = node_node.first->GetDown();
       curr_level--;
     }
     node_node = SearchRight(key, curr_node);
     return node_node;
-
   }
 
   NodeNodePair SearchRight(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
@@ -331,9 +335,22 @@ public:
     new_root_node->SetTowerRoot(new_root_node);
     SKIPLISTNODE_TYPE *new_node = new_root_node, *tower_root = new_node;
 
-    // TODO: remove max_level restriction
-    while (rand() % 2 && (tower_height <= MAX_LEVEL - 1)) {
+    while (rand() % 2) {
       tower_height++;
+    }
+
+    // Create new root if needed
+    SKIPLISTHEADNODE_TYPE *root = root_;
+    while (tower_height > root->GetLevel()) {
+      KeyType index_key;
+      index_key.SetFromKey(nullptr);
+      SKIPLISTHEADNODE_TYPE *new_root = new SKIPLISTHEADNODE_TYPE(index_key, nullptr, root, nullptr, root->GetLevel() + 1);
+      if (__sync_bool_compare_and_swap(&root_, root, new_root)) {
+        root = new_root;
+      } else {
+        delete new_root;
+        root = root_;
+      }
     }
 
     NodeNodePair result_pair;
@@ -366,6 +383,8 @@ public:
                                        SKIPLISTNODE_TYPE::TowerType::MIDDLE_TOWER,
                                        nullptr, down, tower_root);
 
+      // NOTE: Search being done for level 1, 2, ....n. This might hurt performance if not a lot of concurrency.
+      // Should we also store the prev and curr at every level while doing searchtolevel?
       result_pair = SearchToLevel(key, curr_level);
       prev_node = result_pair.first;
       next_node = result_pair.second;
@@ -531,6 +550,7 @@ public:
 private:
 
   SKIPLISTNODE_TYPE *head_;
+  SKIPLISTHEADNODE_TYPE *root_;
   const KeyComparator key_cmp_obj_;
   const KeyEqualityChecker key_eq_check_obj_;
 };
