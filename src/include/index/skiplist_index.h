@@ -76,6 +76,8 @@ class SkipListIndex : public Index {
 
   void ScanKey(const storage::Tuple *key, std::vector<ValueType> &result);
 
+  inline void PrintIndex() {container.PrintSkipList();}
+
   std::string GetTypeName() const;
 
   // TODO: Implement this
