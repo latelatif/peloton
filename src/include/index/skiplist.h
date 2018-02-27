@@ -249,7 +249,7 @@ public:
     SKIPLISTNODE_TYPE *node = head->GetRight();
 
     while(node){
-      std::cout<<"node: "<<node<<" --> ";
+      printf("(key=%s) --> ", node->GetKey().GetInfo().c_str());
       node = node->GetRight();
     }
 
@@ -519,29 +519,38 @@ public:
     }
   }
 
-//  SKIPLISTLEAFNODE_TYPE *Delete(const KeyType &key) {
-//    NodeNodePair result = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT);
-//    if (!key_eq_check_obj_(result.second->GetKey(), key)) {
-//      return nullptr;
-//    }
-//    SKIPLISTNODE_TYPE *root_node = DeleteNode(result.first, result.second);
-//    if (root_node == nullptr) {
-//      return nullptr;
-//    }
-//    SearchToLevel(key, 2, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
-//    return result.second;
-//  }
-//
-//  SKIPLISTNODE_TYPE *DeleteNode(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
-//    NodeStatusResultTuple result_tuple = TryFlagNode(prev_node, del_node);
-//    if (std::get<1>(result_tuple)) {
-//      HelpFlagged(prev_node, del_node);
-//    }
-//    if (std::get<2>(result_tuple) == nullptr) {
-//      return nullptr;
-//    }
-//    return del_node;
-//  }
+  bool Delete(const KeyType &key, const ValueType &value) {
+
+    (void) value;
+
+    NodeNodePair result = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT);
+    if (!key_eq_check_obj_(result.second->GetKey(), key)) {
+      return false;
+    }
+
+
+
+    /* Unlinks the root node of the tower */
+    SKIPLISTNODE_TYPE *root_node = DeleteNode(result.first, result.second);
+    if (root_node == nullptr) {
+      return false;
+    }
+
+    /* Unlinks the node at higher levels */
+    SearchToLevel(key, 2, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
+    return true;
+  }
+
+  SKIPLISTNODE_TYPE *DeleteNode(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
+    NodeStatusResultTuple result_tuple = TryFlagNode(prev_node, del_node);
+    if (std::get<1>(result_tuple)==StatusType::FLAGGED) {
+      HelpFlagged(prev_node, del_node);
+    }
+    if (std::get<2>(result_tuple) == false) {
+      return nullptr;
+    }
+    return del_node;
+  }
 
 
 
