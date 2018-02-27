@@ -51,6 +51,11 @@ public:
       //TAIL_TOWER =2,
   };
 
+  enum class TraversalMode {
+      GO_DOWN_ON_LT = 0,
+      GO_DOWN_ON_LEQ = 1,
+  };
+
   SkipListNode(KeyType key, TowerType tower_type,
                SKIPLISTNODE_TYPE *succ,
                SKIPLISTNODE_TYPE *down, SKIPLISTNODE_TYPE *tower_root)
@@ -278,7 +283,7 @@ public:
   }
 
   SKIPLISTLEAFNODE_TYPE *Search(const KeyType &key) {
-    NodeNodePair node_node = SearchToLevel(key, 1);
+    NodeNodePair node_node = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
     SKIPLISTLEAFNODE_TYPE *curr_node = reinterpret_cast<SKIPLISTLEAFNODE_TYPE *>(node_node.first);
 
     if(curr_node->GetTowerType()==SKIPLISTNODE_TYPE::TowerType::HEAD_TOWER)
@@ -291,7 +296,11 @@ public:
     }
   }
 
-  NodeNodePair SearchToLevel(const KeyType &key, int level) {
+  NodeNodePair SearchToLevel(const KeyType &key, int level,
+    typename SKIPLISTNODE_TYPE::TraversalMode traversal_mode) {
+
+    // TODO(gandeevan): do this cleanly using function pointers
+
     NodeLevelPair node_level = FindStart(level);
     SKIPLISTNODE_TYPE *curr_node = node_level.first;
     NodeNodePair node_node;
@@ -299,17 +308,28 @@ public:
 
     int curr_level = node_level.second;
     while (curr_level > level) { // search down to level v + 1
-      node_node = SearchRight(key, curr_node);
+
+      if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ)
+        node_node = SearchRightLEQ(key, curr_node);
+      else if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT)
+        node_node = SearchRightLT(key, curr_node);
+
       curr_node = node_node.first;
       curr_node = curr_node->GetDown();
       curr_level--;
     }
-    node_node = SearchRight(key, curr_node);
+
+    if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ)
+      node_node = SearchRightLEQ(key, curr_node);
+    else if(traversal_mode == SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT)
+      node_node = SearchRightLT(key, curr_node);
+
+
     return node_node;
 
   }
 
-  NodeNodePair SearchRight(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
+  NodeNodePair SearchRightLEQ(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
 
     PL_ASSERT(curr_node);
     PL_ASSERT(IS_WORD_ALIGNED(curr_node));
@@ -343,7 +363,7 @@ public:
     return std::make_pair(curr_node, next_node);
   }
 
-  NodeNodePair SearchRight2(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
+  NodeNodePair SearchRightLT(const KeyType &key, SKIPLISTNODE_TYPE *curr_node) {
 
     PL_ASSERT(curr_node);
     PL_ASSERT(IS_WORD_ALIGNED(curr_node));
@@ -369,7 +389,7 @@ public:
         next_node = curr_node->GetRight();
       }
 
-      if(next_node && key_eq_check_obj_(next_node->GetKey(), key)<0){
+      if(next_node && key_cmp_obj_(next_node->GetKey(), key)<0){
         curr_node = next_node;
         next_node = curr_node->GetRight();
       }
@@ -384,7 +404,7 @@ public:
     int tower_height = 1, curr_level = 1;
 
 
-    NodeNodePair node_node = SearchToLevel(key, 1);
+    NodeNodePair node_node = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
 
 
     SKIPLISTNODE_TYPE *inserted_node;
@@ -447,7 +467,7 @@ public:
                                        SKIPLISTNODE_TYPE::TowerType::MIDDLE_TOWER,
                                        nullptr, down, tower_root);
 
-      result_pair = SearchToLevel(key, curr_level);
+      result_pair = SearchToLevel(key, curr_level, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
       prev_node = result_pair.first;
       next_node = result_pair.second;
     }
@@ -486,7 +506,7 @@ public:
         }
       }
 
-      NodeNodePair result = SearchRight(new_node->GetKey(), prev_node);
+      NodeNodePair result = SearchRightLEQ(new_node->GetKey(), prev_node);
       prev_node = result.first;
       next_node = result.second;
 
@@ -500,7 +520,7 @@ public:
   }
 
 //  SKIPLISTLEAFNODE_TYPE *Delete(const KeyType &key) {
-//    NodeNodePair result = SearchToLevel2(key, 1);
+//    NodeNodePair result = SearchToLevel(key, 1, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LT);
 //    if (!key_eq_check_obj_(result.second->GetKey(), key)) {
 //      return nullptr;
 //    }
@@ -508,7 +528,7 @@ public:
 //    if (root_node == nullptr) {
 //      return nullptr;
 //    }
-//    SearchToLevel(key, 2);
+//    SearchToLevel(key, 2, SKIPLISTNODE_TYPE::TraversalMode::GO_DOWN_ON_LEQ);
 //    return result.second;
 //  }
 //
@@ -522,7 +542,7 @@ public:
 //    }
 //    return del_node;
 //  }
-//  
+
 
 
   void HelpMarked(SKIPLISTNODE_TYPE *prev_node, SKIPLISTNODE_TYPE *del_node) {
@@ -582,7 +602,7 @@ public:
       }
 
 
-      NodeNodePair node_node = SearchRight2(target_node->GetKey(), prev_node);
+      NodeNodePair node_node = SearchRightLT(target_node->GetKey(), prev_node);
 
       if(node_node.second != target_node)
         return std::make_tuple(prev_node, StatusType::DELETED, false);
